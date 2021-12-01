@@ -7,3 +7,7 @@ CRUD typescript server
 - yarn dev
 - open http://localhost:8080/graphql
 - enjoy!
+
+## features :
+- Register and login system with redis session
+- CRUD
