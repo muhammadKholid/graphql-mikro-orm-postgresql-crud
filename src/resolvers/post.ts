@@ -1,52 +1,136 @@
 import { Post } from "../entities/Post";
 import { MyContext } from "../types";
-import { Resolver, Query, Ctx, Arg, Mutation } from "type-graphql";
+import { Resolver, Query, Ctx, Arg, Mutation, ObjectType, Field } from "type-graphql";
+
+@ObjectType()
+class FieldErrorPost {
+  @Field()
+  field?: string;
+
+  @Field()
+  message: string;
+}
+
+@ObjectType()
+class PostResponse {
+  @Field(() => [FieldErrorPost], { nullable: true })
+  errors?: FieldErrorPost[];
+
+  @Field(() => [Post], { nullable: true })
+  post?: Post[];
+}
+
+@ObjectType()
+class SinglePostResponse {
+  @Field(() => [FieldErrorPost], { nullable: true })
+  errors?: FieldErrorPost[];
+
+  @Field(() => Post, { nullable: true })
+  post?: Post;
+}
+
+@ObjectType()
+class DeletePostResponse {
+  @Field(() => [FieldErrorPost], { nullable: true })
+  errors?: FieldErrorPost[];
+
+  @Field(() => Boolean)
+  isDeleted?: false | true;
+}
 
 @Resolver()
 export class PostResolvers {
-  @Query(() => [Post])
-  posts(@Ctx() { em }: MyContext): Promise<Post[]> {
-    return em.find(Post, {});
+  @Query(() => PostResponse)
+  async posts(@Ctx() { em, req }: MyContext): Promise<PostResponse> {
+    if (!req.session.userId) {
+      return {
+        errors: [
+          {
+            message : "you have not been logged in"
+          }
+       ],
+       post : []
+      };
+    }
+
+    let datas = await em.find(Post, {})
+    return { post : datas};
   }
 
-  @Query(() => Post, { nullable: true })
-  post(@Arg("id") id: number, @Ctx() { em }: MyContext): Promise<Post | null> {
-    return em.findOne(Post, id);
+  @Query(() => SinglePostResponse)
+  async post(@Arg("id") id: number, @Ctx() { em, req }: MyContext): Promise<SinglePostResponse> {
+    if(!req.session.userId){
+      return {
+        errors : [
+          {
+            message : "You have not been logged in"
+          }
+        ]
+      }
+    }
+    let post = await em.findOne(Post, id);
+    return {post: post!}; 
   }
 
-  @Mutation(() => Post)
+  @Mutation(() => SinglePostResponse)
   async createPost(
     @Arg("title") title: string,
-    @Ctx() { em }: MyContext
-  ): Promise<Post> {
+    @Ctx() { em, req }: MyContext
+  ): Promise<SinglePostResponse> {
+  if(!req.session.userId){
+        return {
+          errors: [
+            {
+              message: "You have not been logged in"
+            }
+          ]
+        }
+      }
     const post = em.create(Post, { title });
     await em.persistAndFlush(post);
-    return post;
+    return {post};
   }
 
-  @Mutation(() => Post, { nullable: true })
+  @Mutation(() => SinglePostResponse)
   async updatePost(
     @Arg("id") id: number,
     @Arg("title", () => String, { nullable: true }) title: string,
     @Ctx() { em }: MyContext
-  ): Promise<Post | null> {
+  ): Promise<SinglePostResponse> {
     const post = await em.findOne(Post, id);
     if (!post) {
-      return null;
+      return {
+          errors: [{
+            message : "can't find post"
+          }
+          ]
+        };
     }
     if (typeof title !== undefined) {
       post.title = title;
       em.flush();
     }
-    return post;
+    return {post};
   }
 
-  @Mutation(() => Boolean)
+  @Mutation(() => DeletePostResponse)
   async deletePost(
     @Arg("id") id: number,
-    @Ctx() { em }: MyContext
-  ): Promise<boolean> {
+    @Ctx() { em, req }: MyContext
+  ): Promise<DeletePostResponse> {
+  if(!req.session.userId){
+        return {
+          errors : [
+            {
+              message: "you have not logged in"
+            }
+          ],
+          isDeleted : false
+        }
+      }
     await em.nativeDelete(Post, id);
-    return true;
+    return {
+        isDeleted! : true
+      };
   }
 }
